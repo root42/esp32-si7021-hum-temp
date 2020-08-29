@@ -1,5 +1,3 @@
-#include <SPIFFS.h>
-#include <WiFiSettings.h>
 #include <Wire.h>
  
 // SI7021 I2C address is 0x40(64)
@@ -7,15 +5,39 @@
  
 void setup()
 {
-  Wire.begin();
+  unsigned int data;
+
   Serial.begin(9600);
+  Wire.begin();
+  
+  // Reset Chip
   Wire.beginTransmission(si7021Addr);
+  Wire.write(0xFE);
   Wire.endTransmission();
-  delay(300);
-  SPIFFS.begin(true);  // On first run, will format after failing to mount
-  WiFiSettings.onSuccess  = []() { Serial.print("WiFi connected!"); };
-  WiFiSettings.onFailure  = []() { Serial.print("WiFi connection failed!"); };
-  WiFiSettings.connect();
+  delay(100);
+  
+  // Get Firmware revision
+  Wire.beginTransmission(si7021Addr);
+  Wire.write(0x84);
+  Wire.write(0xB8);
+  Wire.endTransmission();
+  Wire.requestFrom(si7021Addr, 1);
+  if(Wire.available() == 1)
+  {
+    data = Wire.read();
+  }
+  Serial.print("Firmware revision: ");
+  switch( data ) {
+    case 0xFF:
+      Serial.print("1.0");
+      break;
+    case 0x20:
+      Serial.print("2.0");
+      break;
+    default:
+      Serial.print(data, HEX);
+  }
+  Serial.println();
 }
  
 void loop()
@@ -26,7 +48,7 @@ void loop()
   //Send humidity measurement command
   Wire.write(0xF5);
   Wire.endTransmission();
-  delay(500);
+  delay(100);
  
   // Request 2 bytes of data
   Wire.requestFrom(si7021Addr, 2);
@@ -38,14 +60,14 @@ void loop()
   }
  
   // Convert the data
-  float humidity  = ((data[0] * 256.0) + data[1]);
-  humidity = ((125 * humidity) / 65536.0) - 6;
+  unsigned int temp = ((data[0] << 8) + data[1]);
+  float humidity = ((125.0 * temp) / 65536.0) - 6;
  
   Wire.beginTransmission(si7021Addr);
   // Send temperature measurement command
   Wire.write(0xF3);
   Wire.endTransmission();
-  delay(500);
+  delay(100);
  
   // Request 2 bytes of data
   Wire.requestFrom(si7021Addr, 2);
@@ -58,9 +80,8 @@ void loop()
   }
  
   // Convert the data
-  float temp  = ((data[0] * 256.0) + data[1]);
+  temp  = ((data[0] << 8) + data[1]);
   float celsTemp = ((175.72 * temp) / 65536.0) - 46.85;
-  float fahrTemp = celsTemp * 1.8 + 32;
  
   // Output data to serial monitor
   Serial.print("Humidity : ");
@@ -69,8 +90,5 @@ void loop()
   Serial.print("Celsius : ");
   Serial.print(celsTemp);
   Serial.println(" C");
-  Serial.print("Fahrenheit : ");
-  Serial.print(fahrTemp);
-  Serial.println(" F");
   delay(1000);
 }
