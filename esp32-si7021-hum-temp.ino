@@ -1,89 +1,109 @@
 #include <Wire.h>
- 
-// SI7021 I2C address is 0x40(64)
-#define si7021Addr 0x40
- 
-void setup()
-{
-  unsigned int data;
 
-  Serial.begin(9600);
+#define si7021 0x40
+
+bool WireEnd() {
+  unsigned char err;
+  err = Wire.endTransmission();
+  if( err ) {
+    Serial.print("Error: ");
+    Serial.println(err);
+  }
+  return err;
+}
+
+void setup() {
+  bool err;
+  unsigned int data;
+  Serial.begin(115200);
+  delay(1000);
   Wire.begin();
-  
-  // Reset Chip
-  Wire.beginTransmission(si7021Addr);
-  Wire.write(0xFE);
-  Wire.endTransmission();
+
+  // Reset chip
+  Serial.println("Starting up SI7021 sensor...");
+  Wire.beginTransmission(si7021);
+    Wire.write(0xFE);
+  WireEnd();
   delay(100);
+
+  // Get serial
+  Serial.print("Serial ID: ");
+  Wire.beginTransmission(si7021);
+    Wire.write(0xFA);
+    Wire.write(0x0F);
+  err = WireEnd();
+  if( !err ) {
+    Wire.requestFrom(si7021, 8);
+    while(Wire.available()) {
+      data = Wire.read();
+      Serial.print(data,HEX);
+      Serial.print(" ");
+    }
+    Wire.beginTransmission(si7021);
+      Wire.write(0xFC);
+      Wire.write(0xC9);
+    err = WireEnd();
+    if( !err ) {
+      Wire.requestFrom(si7021, 6);
+      while(Wire.available()) {
+        data = Wire.read();
+        Serial.print(data,HEX);
+        Serial.print(" ");
+      }
+    }
+    Serial.println();
+  }
   
   // Get Firmware revision
-  Wire.beginTransmission(si7021Addr);
-  Wire.write(0x84);
-  Wire.write(0xB8);
-  Wire.endTransmission();
-  Wire.requestFrom(si7021Addr, 1);
-  if(Wire.available() == 1)
-  {
-    data = Wire.read();
-  }
   Serial.print("Firmware revision: ");
-  switch( data ) {
-    case 0xFF:
-      Serial.print("1.0");
-      break;
-    case 0x20:
-      Serial.print("2.0");
-      break;
-    default:
+  Wire.beginTransmission(si7021);
+    Wire.write(0x84);
+    Wire.write(0xB8);
+  err = WireEnd();
+  if( !err ) {
+    Wire.requestFrom(si7021, 1);
+    if(Wire.available() == 1)
+    {
+      data = Wire.read();
       Serial.print(data, HEX);
+      Serial.println();
+    } else {
+      Serial.println("Error reading from chip");
+    }
   }
-  Serial.println();
 }
- 
-void loop()
-{
+
+void loop() {
   unsigned int data[2];
- 
-  Wire.beginTransmission(si7021Addr);
-  //Send humidity measurement command
-  Wire.write(0xF5);
-  Wire.endTransmission();
+
+  // Humidity measurement
+  Wire.beginTransmission(si7021);
+    Wire.write(0xF5);
+  WireEnd();
   delay(100);
- 
-  // Request 2 bytes of data
-  Wire.requestFrom(si7021Addr, 2);
-  // Read 2 bytes of data to get humidity
+  Wire.requestFrom(si7021, 2);
   if(Wire.available() == 2)
   {
     data[0] = Wire.read();
     data[1] = Wire.read();
   }
- 
-  // Convert the data
   unsigned int temp = ((data[0] << 8) + data[1]);
   float humidity = ((125.0 * temp) / 65536.0) - 6;
  
-  Wire.beginTransmission(si7021Addr);
-  // Send temperature measurement command
-  Wire.write(0xF3);
-  Wire.endTransmission();
+  // Temperature measurement
+  Wire.beginTransmission(si7021);
+    Wire.write(0xF3);
+  WireEnd();
   delay(100);
- 
-  // Request 2 bytes of data
-  Wire.requestFrom(si7021Addr, 2);
- 
-  // Read 2 bytes of data for temperature
+  Wire.requestFrom(si7021, 2);
   if(Wire.available() == 2)
   {
     data[0] = Wire.read();
     data[1] = Wire.read();
   }
- 
-  // Convert the data
   temp  = ((data[0] << 8) + data[1]);
   float celsTemp = ((175.72 * temp) / 65536.0) - 46.85;
  
-  // Output data to serial monitor
   Serial.print("Humidity : ");
   Serial.print(humidity);
   Serial.println(" % RH");
